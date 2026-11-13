@@ -892,6 +892,7 @@ async def test_invalid_bearer_configuration_fails_before_backend_spawn(token: st
 @pytest.mark.asyncio
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.4", "example.com", "2001:db8::1"])
 async def test_nonloopback_without_auth_fails_before_stdio_spawn(host: str) -> None:
+    """Reject network binds before any backend can start when auth is absent."""
     params = StdioServerParameters(command=sys.executable, args=["-c", _INITIALIZING_STDIO_SERVER])
     with (
         patch("mcp_proxy.mcp_server.stdio_client") as stdio_client,
@@ -903,13 +904,14 @@ async def test_nonloopback_without_auth_fails_before_stdio_spawn(host: str) -> N
 
 @pytest.mark.asyncio
 async def test_nonloopback_rejects_empty_token_before_stdio_spawn() -> None:
+    """Treat an empty token as invalid instead of an authenticated listener."""
     params = StdioServerParameters(command=sys.executable, args=["-c", _INITIALIZING_STDIO_SERVER])
     with (
         patch("mcp_proxy.mcp_server.stdio_client") as stdio_client,
         pytest.raises(ValueError, match="auth_bearer_token"),
     ):
         await run_mcp_server(
-            MCPServerSettings(bind_host="0.0.0.0", port=8080, auth_bearer_token=""),
+            MCPServerSettings(bind_host="0.0.0.0", port=8080, auth_bearer_token=""),  # noqa: S104
             params,
             {},
         )
