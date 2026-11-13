@@ -64,6 +64,9 @@ class MCPServerSettings:
     allowed_hosts: list[str] | None = None
     initialization_timeout: float | None = None
     auth_bearer_token: str | None = None
+    allow_unauthenticated_remote: bool = False
+    allowed_tools: frozenset[str] | None = None
+    expose_tool_errors: bool = False
 
 
 def _valid_bearer_token_bytes(token: bytes) -> bool:
@@ -425,7 +428,6 @@ def create_single_instance_routes(
             logger.warning(
                 "SSE connection for '%s' terminated with error (upstream disconnect?)",
                 mcp_server_instance.name,
-                exc_info=True,
             )
         return Response()
 
@@ -567,7 +569,12 @@ async def _prepare_stdio_server_routes(
     session = await stack.enter_async_context(ClientSession(*stdio_streams))
     stdio_exit.startup_stage = "initialize"
     with anyio.fail_after(settings.initialization_timeout):
-        proxy = await create_proxy_server(session)
+        proxy_options: dict[str, Any] = {}
+        if settings.allowed_tools is not None:
+            proxy_options["allowed_tools"] = settings.allowed_tools
+        if settings.expose_tool_errors:
+            proxy_options["expose_tool_errors"] = True
+        proxy = await create_proxy_server(session, **proxy_options)
 
     stdio_exit.startup_stage = "routes"
     instance_routes, http_manager = create_single_instance_routes(
@@ -700,11 +707,7 @@ async def _serve_mcp_server(
 
         # Setup default server if configured
         if default_server_params:
-            logger.info(
-                "Setting up default server: %s %s",
-                default_server_params.command,
-                " ".join(default_server_params.args),
-            )
+            logger.info("Setting up default server")
             instance_routes = await _prepare_stdio_server_routes(
                 stack,
                 stdio_exit,
@@ -719,12 +722,7 @@ async def _serve_mcp_server(
         # Setup named servers
         for name, params in named_server_params.items():
             status_key = _server_status_key(name, has_default_name_collision)
-            logger.info(
-                "Setting up named server '%s': %s %s",
-                name,
-                params.command,
-                " ".join(params.args),
-            )
+            logger.info("Setting up named server '%s'", name)
             try:
                 instance_routes_named = await _prepare_named_stdio_server_routes(
                     stack,
@@ -803,6 +801,22 @@ async def _serve_mcp_server(
         await http_server.serve()
 
 
+def _enforce_bind_auth_policy(settings: MCPServerSettings) -> None:
+    """Fail closed on unauthenticated non-loopback binds before spawning children."""
+    host = settings.bind_host.strip("[]").lower()
+    if host in {"127.0.0.1", "::1", "localhost"}:
+        return
+    if settings.auth_bearer_token is not None:
+        return
+    if settings.allow_unauthenticated_remote:
+        logger.warning("SECURITY WARNING: unauthenticated remote MCP listener enabled")
+        return
+    raise ValueError(
+        "Non-loopback bind requires MCP_PROXY_AUTH_TOKEN or --auth-bearer-token; "
+        "--allow-unauthenticated-remote is an unsafe override"
+    )
+
+
 async def run_mcp_server(
     mcp_settings: MCPServerSettings,
     default_server_params: StdioServerParameters | None = None,
@@ -819,6 +833,12 @@ async def run_mcp_server(
         or mcp_settings.initialization_timeout <= 0
     ):
         raise ValueError("initialization_timeout must be a finite number greater than zero")
+
+    _enforce_bind_auth_policy(mcp_settings)
+    if mcp_settings.allowed_tools is not None and any(
+        not name.strip() for name in mcp_settings.allowed_tools
+    ):
+        raise ValueError("allowed_tools must contain nonempty tool names")
 
     security_settings = _create_transport_security_settings(mcp_settings)
     named_server_params = {} if named_server_params is None else named_server_params
