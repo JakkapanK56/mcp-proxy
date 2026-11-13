@@ -25,6 +25,13 @@
     - [Example config file](#example-config-file)
   - [Testing](#testing)
 
+## Security defaults in this fork
+
+Network-facing HTTP listeners require `MCP_PROXY_AUTH_TOKEN` by default. Add `--allow-tool NAME`
+to restrict which MCP tools are visible and callable, and use TLS or a trusted tunnel for remote
+access. Tool errors are redacted by default. Unsafe compatibility overrides are available but
+should not be used for internet-facing agents. Read [SECURITY.md](SECURITY.md) before deploying.
+
 ## About
 
 The `mcp-proxy` is a tool that lets you switch between server transports. There are two supported modes:
