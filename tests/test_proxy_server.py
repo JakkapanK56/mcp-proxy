@@ -963,16 +963,20 @@ async def test_call_tool_progress_forwarding_without_token(
 
 
 async def test_tool_allowlist_hides_and_blocks_disallowed_calls() -> None:
+    """Limit both advertised tool names and the actual dispatched calls."""
     upstream: Server[object] = Server("upstream")
     invoked: list[str] = []
 
     @upstream.list_tools()  # type: ignore[no-untyped-call,misc]
     async def _list() -> list[types.Tool]:
-        return [types.Tool(name="safe", inputSchema={}), types.Tool(name="dangerous", inputSchema={})]
+        return [
+            types.Tool(name="safe", inputSchema={}),
+            types.Tool(name="dangerous", inputSchema={}),
+        ]
 
     @upstream.call_tool()  # type: ignore[misc]
     async def _invoke(
-        name: str, arguments: dict[str, t.Any] | None, _context: object | None = None
+        name: str, _arguments: dict[str, t.Any] | None, _context: object | None = None
     ) -> t.Iterable[types.Content]:
         invoked.append(name)
         return [types.TextContent(type="text", text="executed")]
@@ -992,6 +996,7 @@ async def test_tool_allowlist_hides_and_blocks_disallowed_calls() -> None:
 
 
 async def test_proxy_redacts_upstream_tool_errors_by_default() -> None:
+    """Never expose sensitive upstream exceptions to remote MCP clients."""
     upstream: Server[object] = Server("upstream")
 
     @upstream.list_tools()  # type: ignore[no-untyped-call,misc]
@@ -1000,7 +1005,7 @@ async def test_proxy_redacts_upstream_tool_errors_by_default() -> None:
 
     @upstream.call_tool()  # type: ignore[misc]
     async def _invoke(
-        name: str, arguments: dict[str, t.Any] | None, _context: object | None = None
+        _name: str, _arguments: dict[str, t.Any] | None, _context: object | None = None
     ) -> t.Iterable[types.Content]:
         raise RuntimeError("sensitive-internal-token")
 
