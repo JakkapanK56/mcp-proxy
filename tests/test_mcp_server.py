@@ -1620,12 +1620,7 @@ async def test_run_mcp_server_both_default_and_named_servers(
 
         # Verify logging for both servers
         mock_logger.info.assert_any_call("Setting up default server")
-        mock_logger.info.assert_any_call(
-            "Setting up named server '%s': %s %s",
-            "named_server",
-            mock_stdio_params.command,
-            " ".join(mock_stdio_params.args),
-        )
+        mock_logger.info.assert_any_call("Setting up named server '%s'", "named_server")
 
         mock_server_instance.serve.assert_called_once()
 
