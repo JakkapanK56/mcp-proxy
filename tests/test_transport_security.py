@@ -422,6 +422,7 @@ async def test_configured_authorities_remain_independent(
             port=8123,
             allowed_hosts=["mcp.example.com", "proxy.example.com:*"],
             allow_origins=["https://browser.example"],
+            allow_unauthenticated_remote=True,
         ),
         capture_app,
     )
@@ -468,7 +469,9 @@ async def test_nonloopback_ipv6_bind_uses_bracketed_exact_authorities(
 
     await _run_production_server(
         monkeypatch,
-        MCPServerSettings(bind_host="2001:db8::1", port=8123),
+        MCPServerSettings(
+            bind_host="2001:db8::1", port=8123, allow_unauthenticated_remote=True
+        ),
         capture_app,
     )
 
@@ -515,7 +518,7 @@ async def test_nonloopback_bind_derives_default_and_maximum_port_origins(
 
     await _run_production_server(
         monkeypatch,
-        MCPServerSettings(bind_host="example.com", port=port),
+        MCPServerSettings(bind_host="example.com", port=port, allow_unauthenticated_remote=True),
         capture_app,
     )
 
@@ -883,4 +886,31 @@ async def test_invalid_bearer_configuration_fails_before_backend_spawn(token: st
             {},
         )
     assert not token or token not in str(error.value)
+    stdio_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.4", "example.com", "2001:db8::1"])
+async def test_nonloopback_without_auth_fails_before_stdio_spawn(host: str) -> None:
+    params = StdioServerParameters(command=sys.executable, args=["-c", _INITIALIZING_STDIO_SERVER])
+    with (
+        patch("mcp_proxy.mcp_server.stdio_client") as stdio_client,
+        pytest.raises(ValueError, match="Non-loopback bind requires"),
+    ):
+        await run_mcp_server(MCPServerSettings(bind_host=host, port=8080), params, {})
+    stdio_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_nonloopback_rejects_empty_token_before_stdio_spawn() -> None:
+    params = StdioServerParameters(command=sys.executable, args=["-c", _INITIALIZING_STDIO_SERVER])
+    with (
+        patch("mcp_proxy.mcp_server.stdio_client") as stdio_client,
+        pytest.raises(ValueError, match="auth_bearer_token"),
+    ):
+        await run_mcp_server(
+            MCPServerSettings(bind_host="0.0.0.0", port=8080, auth_bearer_token=""),
+            params,
+            {},
+        )
     stdio_client.assert_not_called()
