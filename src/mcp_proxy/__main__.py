@@ -272,6 +272,22 @@ def _add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         ),
     )
     mcp_server_group.add_argument(
+        "--allow-unauthenticated-remote",
+        action="store_true",
+        help="UNSAFE: allow non-loopback inbound HTTP access without authentication.",
+    )
+    mcp_server_group.add_argument(
+        "--allow-tool",
+        action="append",
+        metavar="NAME",
+        help="Only expose and permit this tool; repeat to allow multiple tools.",
+    )
+    mcp_server_group.add_argument(
+        "--expose-tool-errors",
+        action="store_true",
+        help="UNSAFE: forward upstream tool error details to remote clients.",
+    )
+    mcp_server_group.add_argument(
         "--initialization-timeout",
         type=_positive_timeout,
         metavar="SECONDS",
@@ -523,6 +539,9 @@ def _create_mcp_settings(args_parsed: argparse.Namespace) -> MCPServerSettings:
         expose_headers=expose_headers,
         log_level="DEBUG" if args_parsed.debug else args_parsed.log_level,
         auth_bearer_token=auth_bearer_token,
+        allow_unauthenticated_remote=args_parsed.allow_unauthenticated_remote,
+        allowed_tools=frozenset(args_parsed.allow_tool) if args_parsed.allow_tool else None,
+        expose_tool_errors=args_parsed.expose_tool_errors,
     )
 
 
