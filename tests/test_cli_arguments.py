@@ -304,6 +304,7 @@ def test_initialization_timeout_settings(parser: ArgumentParser, value: str | No
 
 
 def test_remote_security_options_propagated(parser: ArgumentParser) -> None:
+    """Parse and forward explicit network-security policy options."""
     args = parser.parse_args(
         [
             "--host", "0.0.0.0", "--allow-unauthenticated-remote",
@@ -318,6 +319,7 @@ def test_remote_security_options_propagated(parser: ArgumentParser) -> None:
 
 
 def test_remote_security_defaults(parser: ArgumentParser) -> None:
+    """Start with an authenticated remote policy and hidden tool error details."""
     settings = _create_mcp_settings(parser.parse_args(["stdio-server"]))
     assert settings.allow_unauthenticated_remote is False
     assert settings.allowed_tools is None
