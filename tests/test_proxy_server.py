@@ -960,3 +960,63 @@ async def test_call_tool_progress_forwarding_without_token(
 
         # Our optimization in proxy_server.py ensures that when no progressToken
         # is present, no progress_callback is created, avoiding unnecessary overhead.
+
+
+async def test_tool_allowlist_hides_and_blocks_disallowed_calls() -> None:
+    """Limit both advertised tool names and the actual dispatched calls."""
+    upstream: Server[object] = Server("upstream")
+    invoked: list[str] = []
+
+    @upstream.list_tools()  # type: ignore[no-untyped-call,misc]
+    async def _list() -> list[types.Tool]:
+        return [
+            types.Tool(name="safe", inputSchema={}),
+            types.Tool(name="dangerous", inputSchema={}),
+        ]
+
+    @upstream.call_tool()  # type: ignore[misc]
+    async def _invoke(
+        name: str, _arguments: dict[str, t.Any] | None, _context: object | None = None
+    ) -> t.Iterable[types.Content]:
+        invoked.append(name)
+        return [types.TextContent(type="text", text="executed")]
+
+    async with in_memory(upstream) as backend:
+        filtered = await create_proxy_server(backend, allowed_tools=frozenset({"safe"}))
+        async with in_memory(filtered) as client:
+            await client.initialize()
+            tools = await client.list_tools()
+            assert [tool.name for tool in tools.tools] == ["safe"]
+            denied = await client.call_tool("dangerous", {})
+            assert denied.isError
+            assert invoked == []
+            permitted = await client.call_tool("safe", {})
+            assert not permitted.isError
+            assert invoked == ["safe"]
+
+
+async def test_proxy_redacts_upstream_tool_errors_by_default() -> None:
+    """Never expose sensitive upstream exceptions to remote MCP clients."""
+    upstream: Server[object] = Server("upstream")
+
+    @upstream.list_tools()  # type: ignore[no-untyped-call,misc]
+    async def _list() -> list[types.Tool]:
+        return [types.Tool(name="broken", inputSchema={})]
+
+    @upstream.call_tool()  # type: ignore[misc]
+    async def _invoke(
+        _name: str, _arguments: dict[str, t.Any] | None, _context: object | None = None
+    ) -> t.Iterable[types.Content]:
+        raise RuntimeError("sensitive-internal-token")
+
+    async with in_memory(upstream) as backend:
+        wrapped = await create_proxy_server(backend)
+        async with in_memory(wrapped) as client:
+            await client.initialize()
+            result = await client.call_tool("broken", {})
+            assert result.isError
+            assert all(
+                "sensitive-internal-token" not in item.text
+                for item in result.content
+                if isinstance(item, types.TextContent)
+            )

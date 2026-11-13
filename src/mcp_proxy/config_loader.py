@@ -141,11 +141,6 @@ def load_named_server_configs_from_file(
             env=new_env,
             cwd=None,
         )
-        logger.info(
-            "Configured named server '%s' from config: %s %s",
-            name,
-            command,
-            " ".join(command_args),
-        )
+        logger.info("Configured named server '%s' from config", name)
 
     return named_stdio_params

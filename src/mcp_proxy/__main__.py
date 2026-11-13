@@ -272,6 +272,22 @@ def _add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         ),
     )
     mcp_server_group.add_argument(
+        "--allow-unauthenticated-remote",
+        action="store_true",
+        help="UNSAFE: allow non-loopback inbound HTTP access without authentication.",
+    )
+    mcp_server_group.add_argument(
+        "--allow-tool",
+        action="append",
+        metavar="NAME",
+        help="Only expose and permit this tool; repeat to allow multiple tools.",
+    )
+    mcp_server_group.add_argument(
+        "--expose-tool-errors",
+        action="store_true",
+        help="UNSAFE: forward upstream tool error details to remote clients.",
+    )
+    mcp_server_group.add_argument(
         "--initialization-timeout",
         type=_positive_timeout,
         metavar="SECONDS",
@@ -431,11 +447,7 @@ def _configure_default_server(
         env=default_server_env,
         cwd=args_parsed.cwd or None,
     )
-    logger.info(
-        "Configured default server: %s %s",
-        args_parsed.command_or_url,
-        " ".join(args_parsed.args),
-    )
+    logger.info("Configured default server")
     return default_stdio_params
 
 
@@ -488,12 +500,11 @@ def _configure_named_servers_from_cli(
                 env=base_env.copy(),  # Each named server gets a copy of the base env
                 cwd=None,  # Named servers run in the proxy's CWD
             )
-            logger.info("Configured named server '%s': %s", name, command_string)
+            logger.info("Configured named server '%s'", name)
         except IndexError:  # Should be caught by the check for empty command_parts
             logger.exception(
-                "Invalid COMMAND_STRING for named server '%s': '%s'. Must include a command.",
+                "Invalid COMMAND_STRING for named server '%s'. Must include a command.",
                 name,
-                command_string,
             )
             sys.exit(1)
         except Exception:
@@ -523,6 +534,9 @@ def _create_mcp_settings(args_parsed: argparse.Namespace) -> MCPServerSettings:
         expose_headers=expose_headers,
         log_level="DEBUG" if args_parsed.debug else args_parsed.log_level,
         auth_bearer_token=auth_bearer_token,
+        allow_unauthenticated_remote=args_parsed.allow_unauthenticated_remote,
+        allowed_tools=frozenset(args_parsed.allow_tool) if args_parsed.allow_tool else None,
+        expose_tool_errors=args_parsed.expose_tool_errors,
     )
 
 

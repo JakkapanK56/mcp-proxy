@@ -1069,11 +1069,7 @@ async def test_run_mcp_server_with_default_server(
             mock_proxy,
             stateless_instance=mock_settings.stateless,
         )
-        mock_logger.info.assert_any_call(
-            "Setting up default server: %s %s",
-            mock_stdio_params.command,
-            " ".join(mock_stdio_params.args),
-        )
+        mock_logger.info.assert_any_call("Setting up default server")
         mock_server_instance.serve.assert_called_once()
 
 
@@ -1126,18 +1122,8 @@ async def test_run_mcp_server_with_named_servers(
         assert mock_create_routes.call_count == 2
 
         # Check that named servers were logged
-        mock_logger.info.assert_any_call(
-            "Setting up named server '%s': %s %s",
-            "default",
-            mock_stdio_params.command,
-            " ".join(mock_stdio_params.args),
-        )
-        mock_logger.info.assert_any_call(
-            "Setting up named server '%s': %s %s",
-            "server2",
-            "python",
-            "-m mcp_server",
-        )
+        mock_logger.info.assert_any_call("Setting up named server '%s'", "default")
+        mock_logger.info.assert_any_call("Setting up named server '%s'", "server2")
 
         assert _global_status["server_instances"] == {
             "default": "configured",
@@ -1153,6 +1139,7 @@ async def test_run_mcp_server_with_cors_middleware(
     settings_with_cors = MCPServerSettings(
         bind_host="0.0.0.0",  # noqa: S104
         port=9090,
+        allow_unauthenticated_remote=True,
         allow_origins=["http://localhost:3000", "https://example.com"],
     )
 
@@ -1198,6 +1185,7 @@ async def test_run_mcp_server_custom_expose_headers(
     settings_with_custom_headers = MCPServerSettings(
         bind_host="0.0.0.0",  # noqa: S104
         port=9090,
+        allow_unauthenticated_remote=True,
         allow_origins=["http://localhost"],
         expose_headers=["Header-One", "Header-Two"],
     )
@@ -1631,17 +1619,8 @@ async def test_run_mcp_server_both_default_and_named_servers(
         assert mock_create_routes.call_count == 2
 
         # Verify logging for both servers
-        mock_logger.info.assert_any_call(
-            "Setting up default server: %s %s",
-            mock_stdio_params.command,
-            " ".join(mock_stdio_params.args),
-        )
-        mock_logger.info.assert_any_call(
-            "Setting up named server '%s': %s %s",
-            "named_server",
-            mock_stdio_params.command,
-            " ".join(mock_stdio_params.args),
-        )
+        mock_logger.info.assert_any_call("Setting up default server")
+        mock_logger.info.assert_any_call("Setting up named server '%s'", "named_server")
 
         mock_server_instance.serve.assert_called_once()
 

@@ -33,7 +33,12 @@ def _with_structured_content_text(result: types.CallToolResult) -> types.CallToo
     return result
 
 
-async def create_proxy_server(remote_app: ClientSession) -> server.Server[object]:  # noqa: C901, PLR0915
+async def create_proxy_server(
+    remote_app: ClientSession,
+    *,
+    allowed_tools: frozenset[str] | None = None,
+    expose_tool_errors: bool = False,
+) -> server.Server[object]:  # noqa: C901, PLR0915
     """Create a server instance from a remote app."""
     logger.debug("Sending initialization request to remote MCP server...")
     response = await remote_app.initialize()
@@ -115,11 +120,23 @@ async def create_proxy_server(remote_app: ClientSession) -> server.Server[object
             tools = await remote_app.list_tools(
                 params=req.params if req is not None else None,
             )
+            if allowed_tools is not None:
+                tools = tools.model_copy(
+                    update={"tools": [tool for tool in tools.tools if tool.name in allowed_tools]}
+                )
             return types.ServerResult(tools)
 
         app.request_handlers[types.ListToolsRequest] = _list_tools
 
         async def _call_tool(req: types.CallToolRequest) -> types.ServerResult:
+            if allowed_tools is not None and req.params.name not in allowed_tools:
+                logger.warning("Blocked MCP tool call by allowlist")
+                return types.ServerResult(
+                    types.CallToolResult(
+                        content=[types.TextContent(type="text", text="Tool not permitted")],
+                        isError=True,
+                    )
+                )
             try:
                 # Convert meta to dict if present (required for TypedDict compatibility)
                 meta_dict = dict(req.params.meta) if req.params.meta else None
@@ -157,11 +174,20 @@ async def create_proxy_server(remote_app: ClientSession) -> server.Server[object
                     meta=meta_dict,
                     progress_callback=progress_callback,
                 )
+                if result.isError and not expose_tool_errors:
+                    logger.warning("Upstream MCP tool returned an error")
+                    return types.ServerResult(
+                        types.CallToolResult(
+                            content=[types.TextContent(type="text", text="Tool execution failed")],
+                            isError=True,
+                        )
+                    )
                 return types.ServerResult(_with_structured_content_text(result))
-            except Exception as e:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
+                logger.warning("Upstream MCP tool invocation raised an exception")
                 return types.ServerResult(
                     types.CallToolResult(
-                        content=[types.TextContent(type="text", text=str(e))],
+                        content=[types.TextContent(type="text", text="Tool execution failed")],
                         isError=True,
                     ),
                 )
