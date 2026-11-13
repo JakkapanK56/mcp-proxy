@@ -447,11 +447,7 @@ def _configure_default_server(
         env=default_server_env,
         cwd=args_parsed.cwd or None,
     )
-    logger.info(
-        "Configured default server: %s %s",
-        args_parsed.command_or_url,
-        " ".join(args_parsed.args),
-    )
+    logger.info("Configured default server")
     return default_stdio_params
 
 
@@ -504,12 +500,11 @@ def _configure_named_servers_from_cli(
                 env=base_env.copy(),  # Each named server gets a copy of the base env
                 cwd=None,  # Named servers run in the proxy's CWD
             )
-            logger.info("Configured named server '%s': %s", name, command_string)
+            logger.info("Configured named server '%s'", name)
         except IndexError:  # Should be caught by the check for empty command_parts
             logger.exception(
-                "Invalid COMMAND_STRING for named server '%s': '%s'. Must include a command.",
+                "Invalid COMMAND_STRING for named server '%s'. Must include a command.",
                 name,
-                command_string,
             )
             sys.exit(1)
         except Exception:
